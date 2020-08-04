@@ -13,7 +13,7 @@
 
 const DEBUG = false;
 const _CreateSubredditFolders = true;
-const _OnlyCertainSubreddits = true;
+const _OnlyCertainSubreddits = true;  // Create only folders for these subreddits.
 const _SubredditFilter = []
 const _RedditUsername = GM_getValue('RedditName', null);
 
