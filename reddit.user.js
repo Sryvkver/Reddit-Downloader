@@ -4,22 +4,26 @@
 // @version      0.1
 // @description  Reddit Downloader with support for Direct links (png, jpg, gif, mp4...), (Gypcat kinda), Redgify, Imgur (Only when supplied with an API key)
 // @author       felixire
-// @match        https://www.reddit.com/user/*
+// @match        https://www.reddit.com/*
+// @require      https://raw.githubusercontent.com/sizzlemctwizzle/GM_config/a4a49b47ecfb1d8fcd27049cc0e8114d05522a0f/gm_config.js
 // @grant        GM_download
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_registerMenuCommand
 // ==/UserScript==
 
-const DEBUG = false;
-const _CreateSubredditFolders = true;
-const _OnlyCertainSubreddits = true;  // Create only folders for these subreddits.
-const _SubredditFilter = []
-const _RedditUsername = GM_getValue('RedditName', null);
+// @match        https://www.reddit.com/user/*
 
-let _ImgurClientID = GM_getValue('ImgurClientID', null);
-let _DownloadLocation = GM_getValue('DownloadLocation', 'Reddit/Stuff/Stuff/');
+const DEBUG = false;
+//const _CreateSubredditFolders = true;
+//const _OnlyCertainSubreddits = true;
+//const _SubredditFilter = []
+//const _RedditUsername = GM_getValue('RedditName', null);
+
+//let _ImgurClientID = GM_getValue('ImgurClientID', null);
+//let _DownloadLocation = GM_getValue('DownloadLocation', 'Reddit/Stuff/Stuff/');
 let _LastDownloadedID = GM_getValue('LastDownloaded', '');
+
 let _IsOnUserPage = window.location.href.includes('saved');
 
 //#region Helpers
@@ -76,8 +80,8 @@ function waitForElements(selectors, timeout = 1000) {
         if(!_IsOnUserPage) isAdded = false;
         if(!isAdded && _IsOnUserPage){
             if(window.RedditDownloader != undefined){
-                window.RedditDownloader.addDownloadButton();
-                isAdded = true;
+                await wait(50);
+                isAdded = window.RedditDownloader.addDownloadButton();
             }
         }
     }
@@ -139,7 +143,7 @@ class DownloadSite{
     _download(url, folder='', name=randomName(), locationAppend=''){
         let details = {
             url: url,
-            name: _DownloadLocation + ((folder != '' && folder != null) ? `/${folder}/` : '') + locationAppend + name + '.' + this._getExtension(url),
+            name: GM_config.get('download_location') + ((folder != '' && folder != null) ? `/${folder}/` : '') + locationAppend + name + '.' + this._getExtension(url),
             saveAs: false
         }
 
@@ -182,14 +186,18 @@ class Imgur extends DownloadSite{
 
     getGalleryLinks(galleryID){
         return new Promise((res, rej) => {
-            if(!_ImgurClientID){
+            if(!GM_config.get('imgur_client_id')){
                 rej('NO CLIENT ID!');
                 return;
             }
-            fetch(this._ApiEndpoint + `gallery/${galleryID}/images?client_id=${_ImgurClientID}`)
+            fetch(this._ApiEndpoint + `gallery/${galleryID}/images?client_id=${GM_config.get('imgur_client_id')}`)
                 .then(body => body.text())
                 .then(text => {
                     let data = JSON.parse(text);
+                    if(data.data.images == undefined){
+                        res([]);
+                        return;
+                    }
                     let links = data.data.images.reduce((a, c) => {
                         console.log(a, c);
                         a.push(c.link);
@@ -205,11 +213,11 @@ class Imgur extends DownloadSite{
 
     getAlbumLinks(albumID){
         return new Promise((res, rej) => {
-            if(!_ImgurClientID){
+            if(!GM_config.get('imgur_client_id')){
                 rej('NO CLIENT ID!');
                 return;
             }
-            fetch(this._ApiEndpoint + `album/${albumID}/images?client_id=${_ImgurClientID}`)
+            fetch(this._ApiEndpoint + `album/${albumID}/images?client_id=${GM_config.get('imgur_client_id')}`)
                 .then(body => body.text())
                 .then(text => {
                     let data = JSON.parse(text);
@@ -3544,7 +3552,9 @@ class RedditDownloader{
     }
 
     addDownloadButton(){
-        document.querySelectorAll('a').forEach(x => {
+        let aEles = document.querySelectorAll('a');
+        for (let index = 0; index < aEles.length; index++) {
+            const x = aEles[index];
             if(x.innerText.toLowerCase().indexOf('overview') > -1){
                 console.log(x);
 
@@ -3556,9 +3566,11 @@ class RedditDownloader{
                 btn.onclick = () => {this.downloadAll()};
                 x.parentNode.appendChild(btn);
 
-                return
+                return true;
             }
-        });
+        }
+
+        return false;
     }
 
     _getRedditData(after=null){
@@ -3567,7 +3579,7 @@ class RedditDownloader{
             if(_IsOnUserPage){
                 username = document.location.href.split('/');
                 username = username[username.indexOf('user')+1];
-            }else if(_RedditUsername != ''){
+            }else if(GM_config.get('reddit_username') != ''){
                 username = _RedditUsername;
             }
 
@@ -3575,6 +3587,14 @@ class RedditDownloader{
                 .then(resp => resp.text())
                 .then(text => res(JSON.parse(text)));
         })
+    }
+
+    _getFilterArray(){
+        return new Promise((res, rej) => {
+            let str = GM_config.get('create_for_filter');
+            let arr = str.split(',').map(val => val.trim());
+            res(arr);
+        });
     }
 
     async downloadAll(){
@@ -3598,6 +3618,7 @@ class RedditDownloader{
         let links = [];
         let first = true;
         let stopAt = _LastDownloadedID;
+        let filter = await this._getFilterArray();
         while(running){
             let data = (await this._getRedditData(after)).data;
             after = data.after;
@@ -3634,8 +3655,8 @@ class RedditDownloader{
                 const site = _SupportedSites[index];
                 if(site.checkSupport(url)){
                     let folder = null;
-                    if(_CreateSubredditFolders){
-                        if(!_OnlyCertainSubreddits || _SubredditFilter.includes(info.subreddit)){
+                    if(GM_config.get('create_subreddit_folder')){
+                        if(!GM_config.get('create_only_for_selected') || filter.includes(info.subreddit)){
                             folder = info.subreddit;
                         }
                     }
@@ -3666,7 +3687,46 @@ class RedditDownloader{
 window.addEventListener('load', async () => {
     await wait(100);
     window.RedditDownloader = new RedditDownloader();
-    //GM_registerMenuCommand('Download Link', (async () => {
-    //    window.RedditDownloader.downloadAll();
-    //}));
+
+    GM_config.init({
+        'id': 'Reddit_Downloader',
+        'fields': {
+            'create_subreddit_folder': {
+                'label': 'Create a subreddit folder which stores all subreddit entries.',
+                'type': 'checkbox',
+                'default': false
+            },
+            'create_only_for_selected': {
+                'label': 'Create a folder only if it passes the filter.',
+                'type': 'checkbox',
+                'default': false
+            },
+            'create_for_filter': {
+                'label': 'The names of the subreddits to create a folder for. (comma seperated)',
+                'type': 'text',
+                'size': 9999999,
+                'default': ''
+            },
+            'reddit_username': {
+                'label': 'Your Reddit username. Not actually needed right now.',
+                'type': 'text',
+                'size': 9999999,
+                'default': ''
+            },
+            'imgur_client_id': {
+                'label': 'Your imgur Client ID. Incase you want to download imgur images/albums.',
+                'type': 'text',
+                'size': 9999999,
+                'default': ''
+            },
+            'download_location': {
+                'label': 'The download location of the files. Inside of your Downloads folder.',
+                'type': 'text',
+                'size': 9999999,
+                'default': 'Reddit/Stuff/Stuff/'
+            }
+        }
+    })
+
+    GM_registerMenuCommand('Manage Settings', (() => {GM_config.open();}));
 })
