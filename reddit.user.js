@@ -5,7 +5,7 @@
 // @description  Reddit Downloader with support for Direct links (png, jpg, gif, mp4...), (Gypcat kinda), Redgify, Imgur (Only when supplied with an API key)
 // @author       felixire
 // @match        https://www.reddit.com/*
-// @require      https://raw.githubusercontent.com/sizzlemctwizzle/GM_config/master/gm_config.js
+// @require      https://github.com/sizzlemctwizzle/GM_config/raw/master/gm_config.js
 // @grant        GM_download
 // @grant        GM_setValue
 // @grant        GM_getValue
