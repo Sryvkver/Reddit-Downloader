@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Reddit Downloader
+// @name         Reddit Saved Downloader
 // @namespace    https://github.com/felixire/Reddit-Downloader
-// @version      0.1
-// @description  Reddit Downloader with support for Direct links (png, jpg, gif, mp4...), (Gypcat kinda), Redgify, Imgur (Only when supplied with an API key)
+// @version      0.1.1
+// @description  Download your saved posts with support for Direct links (png, jpg, gif, mp4...), (Gypcat kinda), Redgify, Imgur (Only when supplied with an API key)
 // @author       felixire
 // @match        https://www.reddit.com/*
 // @require      https://greasyfork.org/scripts/28536-gm-config/code/GM_config.js?version=184529
