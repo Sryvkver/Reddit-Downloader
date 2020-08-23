@@ -24,7 +24,7 @@ const DEBUG = false;
 //let _DownloadLocation = GM_getValue('DownloadLocation', 'Reddit/Stuff/Stuff/');
 let _LastDownloadedID = GM_getValue('LastDownloaded', '');
 
-let _IsOnUserPage = window.location.href.includes('saved');
+let _IsOnUserPage = false;
 
 //#region Helpers
 function wait(ms){
@@ -73,9 +73,10 @@ function waitForElements(selectors, timeout = 1000) {
 //#region Location listener and Post Download button addener
 (async () => {
     let isAdded = false;
+    let username = (await waitForElements('#email-collection-tooltip-id'))[0].innerText.split('\n')[0];
     while(true){
         await wait(50);
-        _IsOnUserPage = window.location.href.includes('reddit.com/user');
+        _IsOnUserPage = window.location.href.includes('reddit.com/user/'+username);
 
         if(!_IsOnUserPage){
             isAdded = false;
@@ -101,15 +102,18 @@ class DownloadSite{
         throw new Error('NOT IMPLEMENTD!');
     }
 
-    async downloadImages(href, folder=''){
+    async downloadImages(info, folder=''){
         return new Promise(async res => {
-            href = this._removeParams(href);
-            let links = await this.getDownloadLinks(href);
+            let url = this._removeParams(info.url);
+            let links = await this.getDownloadLinks(url);
             if(!Array.isArray(links)) links = [links];
             if(links.length > 1)
                 await this._downloadBulk(links, folder, `/${randomName()}/`);
             else
-                this._download(links[0], folder);
+                await this._downloadBulk(links, folder);
+            // if(links.length > 1)
+            // else
+            //     this._download(links[0], folder);
 
             res();
         });
@@ -126,6 +130,14 @@ class DownloadSite{
         return href.replace(/.*\./, '');
     }
 
+    _getParams(href){
+        return href.match(/\?.*/gim);
+    }
+
+    _removeAmpSymbols(href){
+        return href.replace(/amp;/gim, '');
+    }
+
     _removeParams(href){
         return href.replace(/\?.*/gim, '');
     }
@@ -134,8 +146,17 @@ class DownloadSite{
         return new Promise(async res => {
             for (let index = 0; index < links.length; index++) {
                 const url = links[index];
-                const name = `[${index}] ${randomName()}.${this._getExtension(url)}`;
-                this._download(url, folder, name, locationAppend);
+                const params = this._getParams(url);
+                const pureUrl = this._removeParams(url);
+                const name = (links.length > 1 ? `[${index}]` : '') + `${randomName()}`;
+                
+                this._download({
+                    url: url,
+                    folder,
+                    locationAppend,
+                    name,
+                    extension: this._getExtension(pureUrl)
+                });
                 await wait(100);
             }
 
@@ -143,10 +164,15 @@ class DownloadSite{
         })
     }
 
-    _download(url, folder='', name=randomName(), locationAppend=''){
+    //_download(url, folder='', name=randomName(), locationAppend=''){
+    _download(infos){
+        let folder = ((infos.folder != '' && infos.folder != null && infos.folder != undefined) ? `/${infos.folder}/` : '');
+        let locationAppend = ((infos.locationAppend != null && infos.locationAppend != undefined) ? infos.locationAppend : '');
+        let name = (infos.name != '' && infos.name != null && infos.name != undefined) ? infos.name : randomName();
+
         let details = {
-            url: url,
-            name: GM_config.get('download_location') + ((folder != '' && folder != null) ? `/${folder}/` : '') + locationAppend + name + '.' + this._getExtension(url),
+            url: infos.url,
+            name: GM_config.get('download_location') + folder + locationAppend + name + '.' + infos.extension,
             saveAs: false
         }
 
@@ -167,6 +193,51 @@ class DirectDownload extends DownloadSite{
     getDownloadLinks(href){
         if(href.endsWith('.gifv')) href = href.replace('gifv', 'mp4');
         return [href];
+    }
+}
+
+class RedditGallery extends DownloadSite{
+    constructor(){
+        super();
+    }
+
+    async downloadImages(info, folder){
+        return new Promise(async res => {
+            let postJSON = await window.RedditDownloader._getPostData(info.og_url);
+            let media_metadata = postJSON[0].data.children[0].data.media_metadata;
+            if(media_metadata == null || media_metadata == undefined){
+                media_metadata = postJSON[0].data.children[0].data.crosspost_parent_list[0].media_metadata;
+            }
+
+            let media_keys = Object.keys(media_metadata);
+            let links = [];
+
+            for (let i = 0; i < media_keys.length; i++) {
+                const key = media_keys[i];
+                const url = media_metadata[key].s.u;
+                
+                links.push(this._removeAmpSymbols(url));
+            }
+
+            if(!Array.isArray(links)) links = [links];
+            if(links.length > 1)
+                await this._downloadBulk(links, folder, `/${randomName()}/`);
+            else
+                await this._downloadBulk(links, folder);
+            // if(links.length > 1)
+            // else{
+            //     let infos = {}
+            //     this._download(links[0], folder);
+            // }
+
+            res();
+        });
+    }
+
+    checkSupport(href){
+        console.log('-----------------')
+        console.log(href.includes('reddit.com/gallery/'));
+        return (href.includes('reddit.com/gallery/'));
     }
 }
 
@@ -3544,7 +3615,7 @@ class Redgifs extends DownloadSite{
     }
 }
 
-const _SupportedSites = [new DirectDownload(), new Imgur(), new Gfycat(), new Redgifs()];
+const _SupportedSites = [new DirectDownload(), new RedditGallery(), new Imgur(), new Gfycat(), new Redgifs()];
 //#endregion
 
 //#region Downloader Class
@@ -3670,6 +3741,7 @@ class RedditDownloader{
         return {
             id: data.data.name,
             url: data.data.url,
+            og_url: `https://www.reddit.com${data.data.permalink}`,
             subreddit: data.data.subreddit
         }
     }
@@ -3701,7 +3773,7 @@ class RedditDownloader{
                             folder = info.subreddit;
                         }
                     }
-                    await site.downloadImages(url, folder);
+                    await site.downloadImages(info, folder);
                     await wait(20);
                     break;
                 }
