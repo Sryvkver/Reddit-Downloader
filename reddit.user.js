@@ -7,6 +7,7 @@
 // @match        https://www.reddit.com/*
 // @require      https://greasyfork.org/scripts/28536-gm-config/code/GM_config.js?version=184529
 // @grant        GM_download
+// @grant        GM_notification
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_registerMenuCommand
@@ -27,11 +28,11 @@ let _LastDownloadedID = GM_getValue('LastDownloaded', '');
 let _IsOnUserPage = false;
 
 //#region Helpers
-function wait(ms){
+function wait(ms) {
     return new Promise(res => setTimeout(res, ms));
 }
 
-function randomName(length=16){
+function randomName(length = 16) {
     let chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let name = '';
     for (let index = 0; index < length; index++) {
@@ -68,22 +69,29 @@ function waitForElements(selectors, timeout = 1000) {
         });
     })
 }
+
+function createNotification(title, text){
+    GM_notification({
+        title,
+        text
+    })
+}
 //#endregion
 
 //#region Location listener and Post Download button addener
 (async () => {
     let isAdded = false;
     let username = (await waitForElements('#email-collection-tooltip-id'))[0].innerText.split('\n')[0];
-    while(true){
+    while (true) {
         await wait(50);
-        _IsOnUserPage = window.location.href.includes('reddit.com/user/'+username);
+        _IsOnUserPage = window.location.href.includes('reddit.com/user/' + username);
 
-        if(!_IsOnUserPage){
+        if (!_IsOnUserPage) {
             isAdded = false;
-            if(window.RedditDownloader != undefined) await window.RedditDownloader.addPostDownloadButton().catch(() => {});
+            if (window.RedditDownloader != undefined) await window.RedditDownloader.addPostDownloadButton().catch(() => {});
         }
-        if(!isAdded && _IsOnUserPage){
-            if(window.RedditDownloader != undefined){
+        if (!isAdded && _IsOnUserPage) {
+            if (window.RedditDownloader != undefined) {
                 await wait(50);
                 isAdded = window.RedditDownloader.addSavedDownloadButton();
             }
@@ -93,21 +101,21 @@ function waitForElements(selectors, timeout = 1000) {
 //#endregion
 
 //#region Supported Downloaders
-class DownloadSite{
-    constructor(){
+class DownloadSite {
+    constructor() {
 
     }
 
-    checkSupport(href){
+    checkSupport(href) {
         throw new Error('NOT IMPLEMENTD!');
     }
 
-    async downloadImages(info, folder=''){
+    async downloadImages(info, folder = '') {
         return new Promise(async res => {
             let url = this._removeParams(info.url);
             let links = await this.getDownloadLinks(url);
-            if(!Array.isArray(links)) links = [links];
-            if(links.length > 1)
+            if (!Array.isArray(links)) links = [links];
+            if (links.length > 1)
                 await this._downloadBulk(links, folder, `/${randomName()}/`);
             else
                 await this._downloadBulk(links, folder);
@@ -122,34 +130,34 @@ class DownloadSite{
     /**
      * @return {Promise<Array<string>>}
      */
-    getDownloadLinks(href){
+    getDownloadLinks(href) {
         throw new Error('NOT IMPLEMENTD!');
     }
 
-    _getExtension(href){
+    _getExtension(href) {
         return href.replace(/.*\./, '');
     }
 
-    _getParams(href){
+    _getParams(href) {
         return href.match(/\?.*/gim);
     }
 
-    _removeAmpSymbols(href){
+    _removeAmpSymbols(href) {
         return href.replace(/amp;/gim, '');
     }
 
-    _removeParams(href){
+    _removeParams(href) {
         return href.replace(/\?.*/gim, '');
     }
 
-    async _downloadBulk(links, folder='', locationAppend=''){
+    async _downloadBulk(links, folder = '', locationAppend = '') {
         return new Promise(async res => {
             for (let index = 0; index < links.length; index++) {
                 const url = links[index];
                 const params = this._getParams(url);
                 const pureUrl = this._removeParams(url);
                 const name = (links.length > 1 ? `[${index}]` : '') + `${randomName()}`;
-                
+
                 this._download({
                     url: url,
                     folder,
@@ -165,7 +173,7 @@ class DownloadSite{
     }
 
     //_download(url, folder='', name=randomName(), locationAppend=''){
-    _download(infos){
+    _download(infos) {
         let folder = ((infos.folder != '' && infos.folder != null && infos.folder != undefined) ? `/${infos.folder}/` : '');
         let locationAppend = ((infos.locationAppend != null && infos.locationAppend != undefined) ? infos.locationAppend : '');
         let name = (infos.name != '' && infos.name != null && infos.name != undefined) ? infos.name : randomName();
@@ -180,32 +188,32 @@ class DownloadSite{
     }
 }
 
-class DirectDownload extends DownloadSite{
-    constructor(){
+class DirectDownload extends DownloadSite {
+    constructor() {
         super();
         this.supportedExtensions = ['png', 'jpg', 'jpeg', 'gif', 'gifv', 'mp4', 'mp3'];
     }
 
-    checkSupport(href){
+    checkSupport(href) {
         return this.supportedExtensions.includes(this._getExtension(href));
     }
 
-    getDownloadLinks(href){
-        if(href.endsWith('.gifv')) href = href.replace('gifv', 'mp4');
+    getDownloadLinks(href) {
+        if (href.endsWith('.gifv')) href = href.replace('gifv', 'mp4');
         return [href];
     }
 }
 
-class RedditGallery extends DownloadSite{
-    constructor(){
+class RedditGallery extends DownloadSite {
+    constructor() {
         super();
     }
 
-    async downloadImages(info, folder){
+    async downloadImages(info, folder) {
         return new Promise(async res => {
             let postJSON = await window.RedditDownloader._getPostData(info.og_url);
             let media_metadata = postJSON[0].data.children[0].data.media_metadata;
-            if(media_metadata == null || media_metadata == undefined){
+            if (media_metadata == null || media_metadata == undefined) {
                 media_metadata = postJSON[0].data.children[0].data.crosspost_parent_list[0].media_metadata;
             }
 
@@ -215,12 +223,12 @@ class RedditGallery extends DownloadSite{
             for (let i = 0; i < media_keys.length; i++) {
                 const key = media_keys[i];
                 const url = media_metadata[key].s.u;
-                
+
                 links.push(this._removeAmpSymbols(url));
             }
 
-            if(!Array.isArray(links)) links = [links];
-            if(links.length > 1)
+            if (!Array.isArray(links)) links = [links];
+            if (links.length > 1)
                 await this._downloadBulk(links, folder, `/${randomName()}/`);
             else
                 await this._downloadBulk(links, folder);
@@ -234,33 +242,33 @@ class RedditGallery extends DownloadSite{
         });
     }
 
-    checkSupport(href){
+    checkSupport(href) {
         console.log('-----------------')
         console.log(href.includes('reddit.com/gallery/'));
         return (href.includes('reddit.com/gallery/'));
     }
 }
 
-class Imgur extends DownloadSite{
-    constructor(){
+class Imgur extends DownloadSite {
+    constructor() {
         super();
 
         this._ApiEndpoint = 'https://api.imgur.com/3/';
     }
 
-    checkSupport(href){
+    checkSupport(href) {
         return (href.includes('imgur.com/') && !href.includes('i.imgur.com/'));
     }
 
-    getDownloadLinks(href){
+    getDownloadLinks(href) {
         let id = href.replace(/.*\//igm, '');
         let isAlbum = href.replace(/.*imgur.com\//igm, '').startsWith('a');
         return isAlbum ? this.getAlbumLinks(id) : this.getGalleryLinks(id);
     }
 
-    getGalleryLinks(galleryID){
+    getGalleryLinks(galleryID) {
         return new Promise((res, rej) => {
-            if(!GM_config.get('imgur_client_id')){
+            if (!GM_config.get('imgur_client_id')) {
                 rej('NO CLIENT ID!');
                 return;
             }
@@ -268,7 +276,7 @@ class Imgur extends DownloadSite{
                 .then(body => body.text())
                 .then(text => {
                     let data = JSON.parse(text);
-                    if(data.data.images == undefined){
+                    if (data.data.images == undefined) {
                         res([]);
                         return;
                     }
@@ -285,9 +293,9 @@ class Imgur extends DownloadSite{
         })
     }
 
-    getAlbumLinks(albumID){
+    getAlbumLinks(albumID) {
         return new Promise((res, rej) => {
-            if(!GM_config.get('imgur_client_id')){
+            if (!GM_config.get('imgur_client_id')) {
                 rej('NO CLIENT ID!');
                 return;
             }
@@ -306,16 +314,16 @@ class Imgur extends DownloadSite{
     }
 }
 
-class Gfycat extends DownloadSite{
-    constructor(){
+class Gfycat extends DownloadSite {
+    constructor() {
         super();
     }
 
-    checkSupport(href){
+    checkSupport(href) {
         return (href.includes('//gfycat.com/') || href.includes('www.gfycat.com/'));
     }
 
-    getDownloadLinks(href){
+    getDownloadLinks(href) {
         //media => oembed => thumbnail_url
         //https://thumbs.gfycat.com/<ID>-size_restricted.gif
 
@@ -323,8 +331,8 @@ class Gfycat extends DownloadSite{
     }
 }
 
-class Redgifs extends DownloadSite{
-    constructor(){
+class Redgifs extends DownloadSite {
+    constructor() {
         super();
 
         this.gypcatList = [
@@ -3582,17 +3590,17 @@ class Redgifs extends DownloadSite{
         ]
     }
 
-    checkSupport(href){
+    checkSupport(href) {
         return (href.includes('//redgifs.com/') || href.includes('www.redgifs.com/'));
     }
 
-    capatilizeWords(word){
+    capatilizeWords(word) {
         let words = [];
         let remaing = word;
         let ind = 0;
-        while(remaing.length > 0 && ind <= remaing.length){
+        while (remaing.length > 0 && ind <= remaing.length) {
             let word = remaing.slice(0, ++ind);
-            if(this.gypcatList.includes(word)){
+            if (this.gypcatList.includes(word)) {
                 remaing = remaing.slice(ind);
                 words.push(word);
                 ind = 0;
@@ -3602,15 +3610,15 @@ class Redgifs extends DownloadSite{
         return words.map(val => val[0].toUpperCase() + val.slice(1)).join('');
     }
 
-    getDownloadLinks(href){
+    getDownloadLinks(href) {
         //media => oembed => thumbnail_url
         //https://thcf2.redgifs.com/<ID>.mp4
         //https://redgifs.com/watch/<ID>
 
         let words = href.split('/');
-        let cWords = this.capatilizeWords(words[words.length-1]);
-        let url = words.slice(0, words.length-1);
-        url = url.join('/').replace('/watch', '').replace('redgifs', 'thcf2.redgifs') +'/'+cWords+ '.mp4'
+        let cWords = this.capatilizeWords(words[words.length - 1]);
+        let url = words.slice(0, words.length - 1);
+        url = url.join('/').replace('/watch', '').replace('redgifs', 'thcf2.redgifs') + '/' + cWords + '.mp4'
         return url;
     }
 }
@@ -3619,17 +3627,17 @@ const _SupportedSites = [new DirectDownload(), new RedditGallery(), new Imgur(),
 //#endregion
 
 //#region Downloader Class
-class RedditDownloader{
-    constructor(){
+class RedditDownloader {
+    constructor() {
 
         //this.addSavedDownloadButton();
     }
 
-    addSavedDownloadButton(){
+    addSavedDownloadButton() {
         let aEles = document.querySelectorAll('a');
         for (let index = 0; index < aEles.length; index++) {
             const x = aEles[index];
-            if(x.innerText.toLowerCase().indexOf('overview') > -1){
+            if (x.innerText.toLowerCase().indexOf('overview') > -1) {
                 console.log(x);
 
                 let className = x.className;
@@ -3637,7 +3645,9 @@ class RedditDownloader{
                 let btn = document.createElement('a');
                 btn.className = className + ' download';
                 btn.innerText = 'DOWNLOAD';
-                btn.onclick = () => {this.downloadAll()};
+                btn.onclick = () => {
+                    this.downloadAll()
+                };
                 x.parentNode.appendChild(btn);
 
                 return true;
@@ -3647,79 +3657,77 @@ class RedditDownloader{
         return false;
     }
 
-    async addPostDownloadButton(){
+    async addPostDownloadButton() {
         return new Promise(async (res, rej) => {
             let postEles = [...document.querySelectorAll('.Post')];
             let commentButton = document.querySelector('.icon-comment');
-            if(commentButton == null || commentButton == undefined) {rej();return;}
+            if (commentButton == null || commentButton == undefined) {
+                rej();
+                return;
+            }
             let buttonClassName = commentButton.parentElement.parentElement.className;
-            let promises = []
-    
+
             for (let i = 0; i < postEles.length; i++) {
                 const post = postEles[i];
-                if(post.classList.contains('TMP_DOWNLOAD_ADDED') || post.querySelector('a[Reddit_Downloader="download"]') != null || post.classList.contains('promotedvideolink') || post == undefined) continue;
+                if (post.classList.contains('TMP_DOWNLOAD_ADDED') || post.querySelector('a[Reddit_Downloader="download"]') != null || post.classList.contains('promotedvideolink') || post == undefined) continue;
                 //console.log(post);
                 const link = post.querySelector('a[data-click-id="body"]');
-                if(link == undefined || link == null) continue;
+                if (link == undefined || link == null) continue;
                 const url = link.href;
-                console.log(`Getting Data from post: ${url}`);
                 post.classList.add('TMP_DOWNLOAD_ADDED')
-                promises.push(this._getPostData(url)
-                    .then(data => {
-                        if(!document.body.contains(post)){
-                            rej();
-                            return;
-                        }
-                        const info = this._parseData(data[0].data.children[0]);
-
-                        // TODO clean this shit up
-                        let dwnBTN = document.createElement('a');
-                        dwnBTN.className = buttonClassName;
-                        dwnBTN.innerText = 'DOWNLOAD';
-                        dwnBTN.setAttribute('Reddit_Downloader', 'download')
-                        dwnBTN.onclick = () => this.downloadSingle(info);
-                        post.querySelector('.icon-comment').parentElement.parentElement.parentNode.appendChild(dwnBTN);
-                    }).catch(() => {}));
-                /*const data = (await this._getPostData(url))[0].data.children[0];
-                const info = this._parseData(data);
-    
-                // TODO clean this shit up
+                
+                //TODO clean this shit up
                 let dwnBTN = document.createElement('a');
                 dwnBTN.className = buttonClassName;
                 dwnBTN.innerText = 'DOWNLOAD';
                 dwnBTN.setAttribute('Reddit_Downloader', 'download')
-                dwnBTN.onclick = () => this.downloadSingle(info);
-                post.querySelector('.icon-save').parentElement.parentElement.parentNode.appendChild(dwnBTN);
-    
-                post.classList.add('TMP_DOWNLOAD_ADDED');*/
+                dwnBTN.onclick = () => {
+                    console.log(`Getting Data from post: ${url}`);
+                    this._getPostData(url)
+                        .then(data => {
+                            if (!document.body.contains(post)) {
+                                rej();
+                                return;
+                            }
+                            const info = this._parseData(data[0].data.children[0]);
+                            this.downloadSingle(info);
+                        })
+                };
+                post.querySelector('.icon-comment').parentElement.parentElement.parentNode.appendChild(dwnBTN);
+
+                // promises.push(this._getPostData(url)
+                //     .then(data => {
+                //         if(!document.body.contains(post)){
+                //             rej();
+                //             return;
+                //         }
+                //         const info = this._parseData(data[0].data.children[0]);
+
+                //         // TODO clean this shit up
+                //         let dwnBTN = document.createElement('a');
+                //         dwnBTN.className = buttonClassName;
+                //         dwnBTN.innerText = 'DOWNLOAD';
+                //         dwnBTN.setAttribute('Reddit_Downloader', 'download')
+                //         dwnBTN.onclick = () => this.downloadSingle(info);
+                //         post.querySelector('.icon-comment').parentElement.parentElement.parentNode.appendChild(dwnBTN);
+                //     }).catch(() => {}));
             }
 
-            Promise.all(promises).then(values => {
-                res();
-            })
+            res();
+
+            // Promise.all(promises).then(values => {
+            //     res();
+            // })
         })
-
-        // for (let i = 0; i < postsEles.length; i++) {
-        //     const ele = postsEles[i];
-        //     if(ele.classList.contains('TMP_DOWNLOAD')) continue;
-
-        //     let dwnBTN = document.createElement('a');
-        //     dwnBTN.className = ele.className;
-        //     dwnBTN.innerText = 'DOWNLOAD';
-        //     dwnBTN.onclick = () => alert('TODO!');
-        //     ele.parentNode.appendChild(dwnBTN);
-
-        //     ele.classList.add('TMP_DOWNLOAD');
-        // }
     }
 
-    _getSavedPostsData(after=null){
+    _getSavedPostsData(after = null) {
         return new Promise((res, rej) => {
             let username;
-            if(_IsOnUserPage){
+            if (_IsOnUserPage) {
                 username = document.location.href.split('/');
-                username = username[username.indexOf('user')+1];
-            }else if(GM_config.get('reddit_username') != ''){
+                username = username[username.indexOf('user') + 1];
+            } else if (GM_config.get('reddit_username') != '') {
                 username = _RedditUsername;
             }
 
@@ -3729,7 +3737,7 @@ class RedditDownloader{
         })
     }
 
-    _getPostData(url){
+    _getPostData(url) {
         return new Promise((res, rej) => {
             fetch(`${url}/.json`)
                 .then(resp => resp.text())
@@ -3737,7 +3745,7 @@ class RedditDownloader{
         })
     }
 
-    _parseData(data){
+    _parseData(data) {
         return {
             id: data.data.name,
             url: data.data.url,
@@ -3746,7 +3754,7 @@ class RedditDownloader{
         }
     }
 
-    _getFilterArray(){
+    _getFilterArray() {
         return new Promise((res, rej) => {
             let str = GM_config.get('create_for_filter');
             let arr = str.split(',').map(val => val.trim());
@@ -3754,22 +3762,22 @@ class RedditDownloader{
         });
     }
 
-    async downloadSingle(info, filter=null){
-        return new Promise(async(res, rej) => {
-            if(filter == null) filter = await this._getFilterArray();
+    async downloadSingle(info, filter = null) {
+        return new Promise(async (res, rej) => {
+            if (filter == null) filter = await this._getFilterArray();
             const url = info.url;
-    
-            if(url == undefined){
+
+            if (url == undefined) {
                 rej();
                 return;
             };
-    
+
             for (let index = 0; index < _SupportedSites.length; index++) {
                 const site = _SupportedSites[index];
-                if(site.checkSupport(url)){
+                if (site.checkSupport(url)) {
                     let folder = null;
-                    if(GM_config.get('create_subreddit_folder')){
-                        if(!GM_config.get('create_only_for_selected') || filter.includes(info.subreddit)){
+                    if (GM_config.get('create_subreddit_folder')) {
+                        if (!GM_config.get('create_only_for_selected') || filter.includes(info.subreddit)) {
                             folder = info.subreddit;
                         }
                     }
@@ -3782,7 +3790,7 @@ class RedditDownloader{
         })
     }
 
-    async downloadAll(){
+    async downloadAll() {
         console.log('DOWNLOADING!');
         //_SupportedSites.forEach(downloader => {
         //    downloader.checkSupport()
@@ -3804,20 +3812,20 @@ class RedditDownloader{
         let first = true;
         let stopAt = _LastDownloadedID;
         let filter = await this._getFilterArray();
-        while(running){
+        while (running) {
             let data = (await this._getSavedPostsData(after)).data;
             after = data.after;
-            if(after == null||after == 'null') running = false;
+            if (after == null || after == 'null') running = false;
             for (let index = 0; index < data.children.length; index++) {
                 const postData = data.children[index];
                 const info = this._parseData(postData);
 
-                if(info.id == stopAt){
+                if (info.id == stopAt) {
                     running = false;
                     break;
                 }
 
-                if(first){
+                if (first) {
                     first = false;
                     _LastDownloadedID = info.id;
                     GM_setValue('LastDownloaded', info.id);
@@ -3830,7 +3838,7 @@ class RedditDownloader{
         let tmp_title = document.title;
 
         for (let index = 0; index < postInfos.length; index++) {
-            document.title = `${index+1}/${postInfos.length}`; 
+            document.title = `${index+1}/${postInfos.length}`;
             const info = postInfos[index];
             await this.downloadSingle(info, filter);
             /*const url = info.url;
@@ -3854,14 +3862,16 @@ class RedditDownloader{
             }*/
         }
 
+        createNotification('Reddit Downloader', `Finished downloading ${postInfos.length} Posts!`);
+
         document.title = tmp_title;
     }
 }
 //#endregion
 
 
-(async() => {
-    if(DEBUG){
+(async () => {
+    if (DEBUG) {
         //let imgur = new Imgur();
         //await imgur.downloadImages('https://imgur.com/a/w0ouO');
 
@@ -3917,5 +3927,7 @@ window.addEventListener('load', async () => {
         }
     })
 
-    GM_registerMenuCommand('Manage Settings', (() => {GM_config.open();}));
+    GM_registerMenuCommand('Manage Settings', (() => {
+        GM_config.open();
+    }));
 })
