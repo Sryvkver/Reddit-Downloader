@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Reddit Downloader
 // @namespace    https://github.com/felixire/Reddit-Downloader
-// @version      0.1.3
+// @version      0.1.4
 // @description  Download your saved posts or directly posts from your feed with support for Direct links (png, jpg, gif, mp4...), (Gypcat kinda), Redgify, Imgur (Only when supplied with an API key)
 // @author       felixire
 // @match        https://www.reddit.com/*
