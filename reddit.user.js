@@ -13,16 +13,7 @@
 // @grant        GM_registerMenuCommand
 // ==/UserScript==
 
-// @match        https://www.reddit.com/user/*
-
 const DEBUG = false;
-//const _CreateSubredditFolders = true;
-//const _OnlyCertainSubreddits = true;
-//const _SubredditFilter = []
-//const _RedditUsername = GM_getValue('RedditName', null);
-
-//let _ImgurClientID = GM_getValue('ImgurClientID', null);
-//let _DownloadLocation = GM_getValue('DownloadLocation', 'Reddit/Stuff/Stuff/');
 let _LastDownloadedID = GM_getValue('LastDownloaded', '');
 
 let _IsOnUserPage = false;
@@ -51,10 +42,10 @@ function waitForElements(selectors, timeout = 1000) {
         let eles = [];
 
         selectors.forEach(async (sel, i) => {
-            let ele = document.querySelector(sel);
+            let ele = document.querySelector(sel.trim());
             while (ele == null || ele == undefined) {
                 if (time >= timeout) {
-                    utils.error("Timed out while waiting for: ", sel);
+                    console.error("Timed out while waiting for:", sel);
                     rej();
                     return;
                 }
@@ -66,6 +57,7 @@ function waitForElements(selectors, timeout = 1000) {
             eles.push(ele);
             if (i == (selectors.length - 1))
                 res(eles);
+                return;
         });
     })
 }
@@ -81,7 +73,8 @@ function createNotification(title, text){
 //#region Location listener and Post Download button addener
 (async () => {
     let isAdded = false;
-    let username = (await waitForElements('#email-collection-tooltip-id'))[0].innerText.split('\n')[0];
+    let username = await getUsername();
+
     while (true) {
         await wait(50);
         _IsOnUserPage = window.location.href.includes('reddit.com/user/' + username);
@@ -98,6 +91,19 @@ function createNotification(title, text){
         }
     }
 })();
+
+function getUsername(){
+    return new Promise(async(res, rej) => {
+        let usernameEle = [];
+        while(usernameEle == undefined || usernameEle == null || usernameEle.length == 0){
+            usernameEle = await waitForElements('#email-collection-tooltip-id', 5000);
+            console.log("CALLED", usernameEle);
+        }
+
+        res(usernameEle[0].innerText.split('\n')[0]);
+    })
+}
+
 //#endregion
 
 //#region Supported Downloaders
@@ -3618,7 +3624,7 @@ class Redgifs extends DownloadSite {
         let words = href.split('/');
         let cWords = this.capatilizeWords(words[words.length - 1]);
         let url = words.slice(0, words.length - 1);
-        url = url.join('/').replace('/watch', '').replace('redgifs', 'thcf2.redgifs') + '/' + cWords + '.mp4'
+        url = url.join('/').replace('www.', '').replace('/watch', '').replace('redgifs', 'thcf2.redgifs') + '/' + cWords + '.mp4'
         return url;
     }
 }
@@ -3672,8 +3678,20 @@ class RedditDownloader {
                 if (post.classList.contains('TMP_DOWNLOAD_ADDED') || post.querySelector('a[Reddit_Downloader="download"]') != null || post.classList.contains('promotedvideolink') || post == undefined) continue;
                 //console.log(post);
                 const link = post.querySelector('a[data-click-id="body"]');
-                if (link == undefined || link == null) continue;
-                const url = link.href;
+                let url;
+                if (link == undefined || link == null){
+                    if(window.location.href.includes('comments')){
+                        url = window.location.href;
+
+                        if(post.children.length < 1 || post.children[0].getAttribute('data-test-id') != 'post-content') continue;
+
+                    }else{
+                        continue;
+                    }
+
+                }else{
+                    url = link.href
+                }
                 post.classList.add('TMP_DOWNLOAD_ADDED')
                 
                 //TODO clean this shit up
@@ -3840,7 +3858,7 @@ class RedditDownloader {
         for (let index = 0; index < postInfos.length; index++) {
             document.title = `${index+1}/${postInfos.length}`;
             const info = postInfos[index];
-            await this.downloadSingle(info, filter);
+            await this.downloadSingle(info, filter).catch(() => {console.error("Failed to download image!")});
             /*const url = info.url;
             //console.log(`Downloading ${index+1}/${links.length}  -  ${url}`);
 
