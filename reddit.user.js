@@ -1,10 +1,15 @@
 // ==UserScript==
 // @name         Reddit Downloader
 // @namespace    https://github.com/felixire/Reddit-Downloader
-// @version      0.1.5
+// @version      0.2.0
 // @description  Download your saved posts or directly posts from your feed with support for Direct links (png, jpg, gif, mp4...), (Gypcat kinda), Redgify, Imgur (Only when supplied with an API key)
 // @author       felixire
 // @match        https://www.reddit.com/*
+// @match        https://reddit.com/*
+// @match        https://www.old.reddit.com/*
+// @match        https://old.reddit.com/*
+// @match        https://www.new.reddit.com/*
+// @match        https://new.reddit.com/*
 // @require      https://greasyfork.org/scripts/28536-gm-config/code/GM_config.js?version=184529
 // @grant        GM_download
 // @grant        GM_notification
@@ -45,8 +50,8 @@ function waitForElements(selectors, timeout = 1000) {
             let ele = document.querySelector(sel.trim());
             while (ele == null || ele == undefined) {
                 if (time >= timeout) {
-                    console.error("Timed out while waiting for:", sel);
-                    rej();
+                    //console.error("Timed out while waiting for: " + sel);
+                    rej("Timed out while waiting for: " + sel);
                     return;
                 }
 
@@ -57,12 +62,12 @@ function waitForElements(selectors, timeout = 1000) {
             eles.push(ele);
             if (i == (selectors.length - 1))
                 res(eles);
-                return;
+            return;
         });
     })
 }
 
-function createNotification(title, text){
+function createNotification(title, text) {
     GM_notification({
         title,
         text,
@@ -70,64 +75,30 @@ function createNotification(title, text){
     })
 }
 
-async function addSettingsButton(){
-    waitForElements('#change-username-tooltip-id', 5000)
-    .then(parent => {
-        let chatButton = parent[0].children[0];
-        let settingsButton = chatButton.cloneNode(true);
-
-        settingsButton.setAttribute('title', 'Reddit Downloader Settings');
-        settingsButton.querySelector('a').href = '#';
-        settingsButton.querySelector('a').onclick = () => {
-            GM_config.open();
-        };
-        settingsButton.querySelector('svg').setAttribute('viewBox', '0 0 24 24');
-        //Icon link: https://iconmonstr.com/gear-1-svg/
-        settingsButton.querySelector('path').setAttribute('d', 'M24 13.616v-3.232c-1.651-.587-2.694-.752-3.219-2.019v-.001c-.527-1.271.1-2.134.847-3.707l-2.285-2.285c-1.561.742-2.433 1.375-3.707.847h-.001c-1.269-.526-1.435-1.576-2.019-3.219h-3.232c-.582 1.635-.749 2.692-2.019 3.219h-.001c-1.271.528-2.132-.098-3.707-.847l-2.285 2.285c.745 1.568 1.375 2.434.847 3.707-.527 1.271-1.584 1.438-3.219 2.02v3.232c1.632.58 2.692.749 3.219 2.019.53 1.282-.114 2.166-.847 3.707l2.285 2.286c1.562-.743 2.434-1.375 3.707-.847h.001c1.27.526 1.436 1.579 2.019 3.219h3.232c.582-1.636.75-2.69 2.027-3.222h.001c1.262-.524 2.12.101 3.698.851l2.285-2.286c-.744-1.563-1.375-2.433-.848-3.706.527-1.271 1.588-1.44 3.221-2.021zm-12 2.384c-2.209 0-4-1.791-4-4s1.791-4 4-4 4 1.791 4 4-1.791 4-4 4z');
-        parent[0].appendChild(settingsButton);
-    })
-    .catch(err => {
-        addSettingsButton();
-    });
-}
-//#endregion
-
-//#region Location listener and Post Download button addener
-(async () => {
-    if (window.top != window.self) 
-    {
-        return;
-    }
-
-    let isAdded = false;
-    let username = await getUsername();
-
-    while (true) {
-        await wait(50);
-        _IsOnUserPage = window.location.href.includes('reddit.com/user/' + username);
-
-        if (!_IsOnUserPage) {
-            isAdded = false;
-            if (window.RedditDownloader != undefined) await window.RedditDownloader.addPostDownloadButton().catch(() => {});
+function isOldReddit(){
+    return new Promise((res) => {
+        if (window.location.href.includes('old.reddit.com')){
+            res(true);
+            return true;
         }
-        if (!isAdded && _IsOnUserPage) {
-            if (window.RedditDownloader != undefined) {
-                await wait(50);
-                isAdded = window.RedditDownloader.addSavedDownloadButton();
-            }
+        if (window.location.href.includes('new.reddit.com')){
+            res(false);
+            return false;
         }
-    }
-})();
+    
+        //Old page
+        waitForElements('.redesign-beta-optin', 5000)
+        .then(() => {
+            res(true);
+            return true;
+        }).catch(() => {})
 
-function getUsername(){
-    return new Promise(async(res, rej) => {
-        let usernameEle = [];
-        while(usernameEle == undefined || usernameEle == null || usernameEle.length == 0){
-            usernameEle = await waitForElements('#email-collection-tooltip-id', 5000);
-            console.log("CALLED", usernameEle);
-        }
-
-        res(usernameEle[0].innerText.split('\n')[0]);
+        //New page
+        waitForElements('#SHORTCUT_FOCUSABLE_DIV', 5000)
+        .then(() => {
+            res(false);
+            return false;
+        }).catch(() => {})
     })
 }
 
@@ -210,10 +181,11 @@ class DownloadSite {
         let folder = ((infos.folder != '' && infos.folder != null && infos.folder != undefined) ? `/${infos.folder}/` : '');
         let locationAppend = ((infos.locationAppend != null && infos.locationAppend != undefined) ? infos.locationAppend : '');
         let name = (infos.name != '' && infos.name != null && infos.name != undefined) ? infos.name : randomName();
+        let downloadLocation = GM_config.get('download_location').substr(-1) != '/' ? GM_config.get('download_location')+'/' : GM_config.get('download_location');
 
         let details = {
             url: infos.url,
-            name: GM_config.get('download_location') + folder + locationAppend + name + '.' + infos.extension,
+            name: downloadLocation + folder + locationAppend + name + '.' + infos.extension,
             saveAs: false
         }
 
@@ -3660,110 +3632,9 @@ const _SupportedSites = [new DirectDownload(), new RedditGallery(), new Imgur(),
 //#endregion
 
 //#region Downloader Class
-class RedditDownloader {
+class BaseRedditClass {
     constructor() {
 
-        //this.addSavedDownloadButton();
-    }
-
-    addSavedDownloadButton() {
-        let aEles = document.querySelectorAll('a');
-        for (let index = 0; index < aEles.length; index++) {
-            const x = aEles[index];
-            if (x.innerText.toLowerCase().indexOf('overview') > -1) {
-                console.log(x);
-
-                let className = x.className;
-
-                let btn = document.createElement('a');
-                btn.className = className + ' download';
-                btn.innerText = 'DOWNLOAD';
-                btn.onclick = () => {
-                    this.downloadAll()
-                };
-                x.parentNode.appendChild(btn);
-
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    async addPostDownloadButton() {
-        return new Promise(async (res, rej) => {
-            let postEles = [...document.querySelectorAll('.Post')];
-            let commentButton = document.querySelector('.icon-comment');
-            if (commentButton == null || commentButton == undefined) {
-                rej();
-                return;
-            }
-            let buttonClassName = commentButton.parentElement.parentElement.className;
-
-            for (let i = 0; i < postEles.length; i++) {
-                const post = postEles[i];
-                if (post.classList.contains('TMP_DOWNLOAD_ADDED') || post.querySelector('a[Reddit_Downloader="download"]') != null || post.classList.contains('promotedvideolink') || post == undefined) continue;
-                //console.log(post);
-                const link = post.querySelector('a[data-click-id="body"]');
-                let url;
-                if (link == undefined || link == null){
-                    if(window.location.href.includes('comments')){
-                        url = window.location.href;
-
-                        if(post.children.length < 1 || post.children[0].getAttribute('data-test-id') != 'post-content') continue;
-
-                    }else{
-                        continue;
-                    }
-
-                }else{
-                    url = link.href
-                }
-                post.classList.add('TMP_DOWNLOAD_ADDED')
-                
-                //TODO clean this shit up
-                let dwnBTN = document.createElement('a');
-                dwnBTN.className = buttonClassName;
-                dwnBTN.innerText = 'DOWNLOAD';
-                dwnBTN.setAttribute('Reddit_Downloader', 'download')
-                dwnBTN.onclick = () => {
-                    console.log(`Getting Data from post: ${url}`);
-                    this._getPostData(url)
-                        .then(data => {
-                            if (!document.body.contains(post)) {
-                                rej();
-                                return;
-                            }
-                            const info = this._parseData(data[0].data.children[0]);
-                            this.downloadSingle(info);
-                        })
-                };
-                post.querySelector('.icon-comment').parentElement.parentElement.parentNode.appendChild(dwnBTN);
-
-                // promises.push(this._getPostData(url)
-                //     .then(data => {
-                //         if(!document.body.contains(post)){
-                //             rej();
-                //             return;
-                //         }
-                //         const info = this._parseData(data[0].data.children[0]);
-
-                //         // TODO clean this shit up
-                //         let dwnBTN = document.createElement('a');
-                //         dwnBTN.className = buttonClassName;
-                //         dwnBTN.innerText = 'DOWNLOAD';
-                //         dwnBTN.setAttribute('Reddit_Downloader', 'download')
-                //         dwnBTN.onclick = () => this.downloadSingle(info);
-                //         post.querySelector('.icon-comment').parentElement.parentElement.parentNode.appendChild(dwnBTN);
-                //     }).catch(() => {}));
-            }
-
-            res();
-
-            // Promise.all(promises).then(values => {
-            //     res();
-            // })
-        })
     }
 
     _getSavedPostsData(after = null) {
@@ -3776,7 +3647,7 @@ class RedditDownloader {
                 username = _RedditUsername;
             }
 
-            fetch(`https://www.reddit.com/user/${username}/saved/.json?limit=20${after != null ? '&after=' + after : ''}`)
+            fetch(`${window.location.origin}/user/${username}/saved/.json?limit=20${after != null ? '&after=' + after : ''}`)
                 .then(resp => resp.text())
                 .then(text => res(JSON.parse(text)));
         })
@@ -3885,7 +3756,9 @@ class RedditDownloader {
         for (let index = 0; index < postInfos.length; index++) {
             document.title = `${index+1}/${postInfos.length}`;
             const info = postInfos[index];
-            await this.downloadSingle(info, filter).catch(() => {console.error("Failed to download image!")});
+            await this.downloadSingle(info, filter).catch(() => {
+                console.error("Failed to download image!")
+            });
             /*const url = info.url;
             //console.log(`Downloading ${index+1}/${links.length}  -  ${url}`);
 
@@ -3912,6 +3785,287 @@ class RedditDownloader {
         document.title = tmp_title;
     }
 }
+
+class RedditDownloader extends BaseRedditClass {
+    constructor() {
+        super();
+
+        //this.addSavedDownloadButton();
+        this.addSettingsButton();
+        this.pageUpdateChecker();
+    }
+
+    addSavedDownloadButton() {
+        let aEles = document.querySelectorAll('a');
+        for (let index = 0; index < aEles.length; index++) {
+            const x = aEles[index];
+            if (x.innerText.toLowerCase().indexOf('overview') > -1) {
+                console.log(x);
+
+                let className = x.className;
+
+                let btn = document.createElement('a');
+                btn.className = className + ' download';
+                btn.innerText = 'DOWNLOAD';
+                btn.onclick = () => {
+                    this.downloadAll()
+                };
+                x.parentNode.appendChild(btn);
+
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    async addPostDownloadButton() {
+        return new Promise(async (res, rej) => {
+            let postEles = [...document.querySelectorAll('.Post')];
+            let commentButton = document.querySelector('.icon-comment');
+            if (commentButton == null || commentButton == undefined) {
+                rej();
+                return;
+            }
+            let buttonClassName = commentButton.parentElement.parentElement.className;
+
+            for (let i = 0; i < postEles.length; i++) {
+                const post = postEles[i];
+                if (post.classList.contains('TMP_DOWNLOAD_ADDED') || post.querySelector('a[Reddit_Downloader="download"]') != null || post.classList.contains('promotedvideolink') || post == undefined) continue;
+                //console.log(post);
+                const link = post.querySelector('a[data-click-id="body"]');
+                let url;
+                if (link == undefined || link == null) {
+                    if (window.location.href.includes('comments')) {
+                        url = window.location.href;
+
+                        if (post.children.length < 1 || post.children[0].getAttribute('data-test-id') != 'post-content') continue;
+
+                    } else {
+                        continue;
+                    }
+
+                } else {
+                    url = link.href
+                }
+                post.classList.add('TMP_DOWNLOAD_ADDED')
+
+                //TODO clean this shit up
+                let dwnBTN = document.createElement('a');
+                dwnBTN.className = buttonClassName;
+                dwnBTN.innerText = 'DOWNLOAD';
+                dwnBTN.setAttribute('Reddit_Downloader', 'download')
+                dwnBTN.onclick = () => {
+                    console.log(`Getting Data from post: ${url}`);
+                    this._getPostData(url)
+                        .then(data => {
+                            if (!document.body.contains(post)) {
+                                rej();
+                                return;
+                            }
+                            const info = this._parseData(data[0].data.children[0]);
+                            this.downloadSingle(info);
+                        })
+                };
+                post.querySelector('.icon-comment').parentElement.parentElement.parentNode.appendChild(dwnBTN);
+
+                // promises.push(this._getPostData(url)
+                //     .then(data => {
+                //         if(!document.body.contains(post)){
+                //             rej();
+                //             return;
+                //         }
+                //         const info = this._parseData(data[0].data.children[0]);
+
+                //         // TODO clean this shit up
+                //         let dwnBTN = document.createElement('a');
+                //         dwnBTN.className = buttonClassName;
+                //         dwnBTN.innerText = 'DOWNLOAD';
+                //         dwnBTN.setAttribute('Reddit_Downloader', 'download')
+                //         dwnBTN.onclick = () => this.downloadSingle(info);
+                //         post.querySelector('.icon-comment').parentElement.parentElement.parentNode.appendChild(dwnBTN);
+                //     }).catch(() => {}));
+            }
+
+            res();
+
+            // Promise.all(promises).then(values => {
+            //     res();
+            // })
+        })
+    }
+
+    async addSettingsButton() {
+        waitForElements('#change-username-tooltip-id', 5000)
+            .then(parent => {
+                let chatButton = parent[0].children[0];
+                let settingsButton = chatButton.cloneNode(true);
+
+                settingsButton.setAttribute('title', 'Reddit Downloader Settings');
+                settingsButton.querySelector('a').href = '#';
+                settingsButton.querySelector('a').onclick = () => {
+                    GM_config.open();
+                };
+                settingsButton.querySelector('svg').setAttribute('viewBox', '0 0 24 24');
+                //Icon link: https://iconmonstr.com/gear-1-svg/
+                settingsButton.querySelector('path').setAttribute('d', 'M24 13.616v-3.232c-1.651-.587-2.694-.752-3.219-2.019v-.001c-.527-1.271.1-2.134.847-3.707l-2.285-2.285c-1.561.742-2.433 1.375-3.707.847h-.001c-1.269-.526-1.435-1.576-2.019-3.219h-3.232c-.582 1.635-.749 2.692-2.019 3.219h-.001c-1.271.528-2.132-.098-3.707-.847l-2.285 2.285c.745 1.568 1.375 2.434.847 3.707-.527 1.271-1.584 1.438-3.219 2.02v3.232c1.632.58 2.692.749 3.219 2.019.53 1.282-.114 2.166-.847 3.707l2.285 2.286c1.562-.743 2.434-1.375 3.707-.847h.001c1.27.526 1.436 1.579 2.019 3.219h3.232c.582-1.636.75-2.69 2.027-3.222h.001c1.262-.524 2.12.101 3.698.851l2.285-2.286c-.744-1.563-1.375-2.433-.848-3.706.527-1.271 1.588-1.44 3.221-2.021zm-12 2.384c-2.209 0-4-1.791-4-4s1.791-4 4-4 4 1.791 4 4-1.791 4-4 4z');
+                parent[0].appendChild(settingsButton);
+            })
+            .catch(err => {
+                this.addSettingsButton();
+            });
+    }
+
+    async pageUpdateChecker() {
+        let isAdded = false;
+        let username = await this.getUsername();
+
+        while (true) {
+            await wait(50);
+            _IsOnUserPage = window.location.href.includes('reddit.com/user/' + username);
+
+            if (!_IsOnUserPage) {
+                isAdded = false;
+                if (window.RedditDownloader != undefined) await window.RedditDownloader.addPostDownloadButton().catch(() => {});
+            }
+            if (!isAdded && _IsOnUserPage) {
+                if (window.RedditDownloader != undefined) {
+                    await wait(50);
+                    isAdded = window.RedditDownloader.addSavedDownloadButton();
+                }
+            }
+        }
+    }
+
+    async getUsername() {
+        return new Promise(async (res, rej) => {
+            let usernameEle = [];
+            while (usernameEle == undefined || usernameEle == null || usernameEle.length == 0) {
+                usernameEle = await waitForElements('#email-collection-tooltip-id', 5000);
+                console.log("CALLED", usernameEle);
+            }
+
+            res(usernameEle[0].innerText.split('\n')[0]);
+        })
+    }
+}
+
+class OldRedditDownloader extends BaseRedditClass {
+    constructor() {
+        super();
+
+        //this.addSavedDownloadButton();
+        //this.addSettingsButton();
+        this.pageUpdateChecker();
+    }
+
+    async addSavedDownloadButton() {
+        return new Promise(async (res) => {
+            waitForElements('.tabmenu')
+            .then(ele => {
+                let tabmenu = ele[0];
+
+                let downloadLi = document.createElement('li');
+                let downloadA = document.createElement('a');
+                downloadA.classList.add('choice');
+                downloadA.innerHTML = 'Download';
+                downloadA.style.cursor = 'pointer';
+                downloadA.onclick = () => {
+                    this.downloadAll();
+                }
+
+                downloadLi.appendChild(downloadA);
+                tabmenu.appendChild(downloadLi);
+            })
+            .catch(() => {
+                res(false);
+            })
+        })
+    }
+
+    async addPostDownloadButton() {
+        return new Promise(async (res, rej) => {
+            let postEles = [...document.querySelectorAll('.thing[data-subreddit-prefixed]')];
+
+
+            for (let index = 0; index < postEles.length; index++) {
+                const post = postEles[index];
+
+                if (post.classList.contains('TMP_DOWNLOAD_ADDED') || post.querySelector('a[Reddit_Downloader="download"]') != null || post.classList.contains('promotedvideolink') || post == undefined) continue;
+
+                const link = post.querySelector('a[data-event-action="comments"]');
+                let url = link;
+                post.classList.add('TMP_DOWNLOAD_ADDED')
+
+                const buttons = post.querySelector('.flat-list.buttons');
+
+                const downloadButtonLi = document.createElement('li');
+                downloadButtonLi.classList.add('download-button');
+                
+                const downloadButtonA = document.createElement('a');
+                downloadButtonA.innerHTML = 'Download';
+                downloadButtonA.setAttribute('Reddit_Downloader', 'download');
+
+                downloadButtonA.onclick = () => {
+                    console.log(`Getting Data from post: ${url}`);
+                    this._getPostData(url)
+                        .then(data => {
+                            if (!document.body.contains(post)) {
+                                rej();
+                                return;
+                            }
+                            const info = this._parseData(data[0].data.children[0]);
+                            this.downloadSingle(info);
+                        })
+                }
+
+                downloadButtonLi.appendChild(downloadButtonA);
+                buttons.appendChild(downloadButtonLi);
+
+                
+            }
+
+            res();
+        })
+    }
+
+    async addSettingsButton() {
+        createNotification('Nope', 'Not implement "settings button" yet... :C');
+    }
+
+    async pageUpdateChecker() {
+        let isAdded = false;
+        let username = await this.getUsername();
+
+        while (true) {
+            await wait(50);
+            _IsOnUserPage = window.location.href.includes('reddit.com/user/' + username);
+
+            if (!_IsOnUserPage) {
+                isAdded = false;
+                if (window.RedditDownloader != undefined) await window.RedditDownloader.addPostDownloadButton().catch(() => {});
+            }
+            if (!isAdded && _IsOnUserPage) {
+                if (window.RedditDownloader != undefined) {
+                    await wait(50);
+                    isAdded = await window.RedditDownloader.addSavedDownloadButton();
+                }
+            }
+        }
+    }
+
+    async getUsername() {
+        return new Promise(async (res, rej) => {
+            let usernameEle = [];
+            while (usernameEle == undefined || usernameEle == null || usernameEle.length == 0) {
+                usernameEle = await waitForElements('.user', 5000);
+                console.log("CALLED", usernameEle);
+            }
+
+            res(usernameEle[0].children[0].innerText.trim());
+        })
+    }
+}
 //#endregion
 
 
@@ -3929,13 +4083,16 @@ class RedditDownloader {
 })()
 
 window.addEventListener('load', async () => {
-    if (window.top != window.self) 
-    {
+    if (window.top != window.self) {
         return;
     }
 
     await wait(100);
-    window.RedditDownloader = new RedditDownloader();
+    let oldReddit = await isOldReddit();
+    if (oldReddit)
+        window.RedditDownloader = new OldRedditDownloader();
+    else
+        window.RedditDownloader = new RedditDownloader();
 
     GM_config.init({
         'id': 'Reddit_Downloader',
@@ -3976,8 +4133,6 @@ window.addEventListener('load', async () => {
             }
         }
     });
-
-    addSettingsButton();
 
     GM_registerMenuCommand('Manage Settings', (() => {
         GM_config.open();
