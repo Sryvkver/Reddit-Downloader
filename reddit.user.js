@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Reddit Downloader
 // @namespace    https://github.com/felixire/Reddit-Downloader
-// @version      0.2.0
+// @version      0.2.1
 // @description  Download your saved posts or directly posts from your feed with support for Direct links (png, jpg, gif, mp4...), (Gypcat kinda), Redgify, Imgur (Only when supplied with an API key)
 // @author       felixire
 // @match        https://www.reddit.com/*
@@ -3955,7 +3955,7 @@ class OldRedditDownloader extends BaseRedditClass {
         super();
 
         //this.addSavedDownloadButton();
-        //this.addSettingsButton();
+        this.addSettingsButton();
         this.pageUpdateChecker();
     }
 
@@ -4030,7 +4030,25 @@ class OldRedditDownloader extends BaseRedditClass {
     }
 
     async addSettingsButton() {
-        createNotification('Nope', 'Not implement "settings button" yet... :C');
+        waitForElements('.tabmenu', 5000)
+        .then(parent => {
+            let tabmenu = parent[0];
+
+            let downloadLi = document.createElement('li');
+            let downloadA = document.createElement('a');
+            downloadA.classList.add('choice');
+            downloadA.innerHTML = 'RD-Settings';
+            downloadA.style.cursor = 'pointer';
+            downloadA.onclick = () => {
+                GM_config.open();
+            }
+
+            downloadLi.appendChild(downloadA);
+            tabmenu.appendChild(downloadLi);
+        })
+        .catch(() => {
+            this.addSettingsButton();
+        })
     }
 
     async pageUpdateChecker() {
