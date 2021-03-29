@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Reddit Downloader
 // @namespace    https://github.com/felixire/Reddit-Downloader
-// @version      0.2.2
+// @version      0.2.3
 // @description  Download your saved posts or directly posts from your feed with support for Direct links (png, jpg, gif, mp4...), (Gypcat kinda), Redgify, Imgur (Only when supplied with an API key)
 // @author       felixire
 // @match        https://www.reddit.com/*
@@ -3791,7 +3791,7 @@ class RedditDownloader extends BaseRedditClass {
         super();
 
         //this.addSavedDownloadButton();
-        this.addSettingsButton();
+        //this.addSettingsButton();
         this.pageUpdateChecker();
     }
 
@@ -4107,10 +4107,12 @@ window.addEventListener('load', async () => {
 
     await wait(100);
     let oldReddit = await isOldReddit();
+
     if (oldReddit)
         window.RedditDownloader = new OldRedditDownloader();
-    else
+    else{
         window.RedditDownloader = new RedditDownloader();
+    }
 
     GM_config.init({
         'id': 'Reddit_Downloader',
