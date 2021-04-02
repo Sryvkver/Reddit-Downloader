@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Reddit Downloader
 // @namespace    https://github.com/felixire/Reddit-Downloader
-// @version      0.2.3
+// @version      0.2.4
 // @description  Download your saved posts or directly posts from your feed with support for Direct links (png, jpg, gif, mp4...), (Gypcat kinda), Redgify, Imgur (Only when supplied with an API key)
 // @author       felixire
 // @match        https://www.reddit.com/*
@@ -85,7 +85,7 @@ function isOldReddit(){
             res(false);
             return false;
         }
-    
+
         //Old page
         waitForElements('.redesign-beta-optin', 5000)
         .then(() => {
@@ -120,7 +120,7 @@ class DownloadSite {
             let links = await this.getDownloadLinks(url);
             if (!Array.isArray(links)) links = [links];
             if (links.length > 1)
-                await this._downloadBulk(links, folder, `/${randomName()}/`);
+                await this._downloadBulk(links, folder, `${randomName()}`);
             else
                 await this._downloadBulk(links, folder);
             // if(links.length > 1)
@@ -178,10 +178,10 @@ class DownloadSite {
 
     //_download(url, folder='', name=randomName(), locationAppend=''){
     _download(infos) {
-        let folder = ((infos.folder != '' && infos.folder != null && infos.folder != undefined) ? `/${infos.folder}/` : '');
-        let locationAppend = ((infos.locationAppend != null && infos.locationAppend != undefined) ? infos.locationAppend : '');
-        let name = (infos.name != '' && infos.name != null && infos.name != undefined) ? infos.name : randomName();
-        let downloadLocation = GM_config.get('download_location').substr(-1) != '/' ? GM_config.get('download_location')+'/' : GM_config.get('download_location');
+        let folder = ((infos.folder != '' && infos.folder != null && infos.folder != undefined && infos.folder != '') ? `/${infos.folder}` : '');
+        let locationAppend = ((infos.locationAppend != null && infos.locationAppend != undefined && infos.locationAppend != '') ? `/${infos.locationAppend}` : '');
+        let name = (infos.name != '' && infos.name != null && infos.name != undefined) ? `/${infos.name}` : '/' + randomName();
+        let downloadLocation = GM_config.get('download_location').substr(-1) == '/' ? GM_config.get('download_location').slice(0, -1) : GM_config.get('download_location');
 
         let details = {
             url: infos.url,
@@ -234,7 +234,7 @@ class RedditGallery extends DownloadSite {
 
             if (!Array.isArray(links)) links = [links];
             if (links.length > 1)
-                await this._downloadBulk(links, folder, `/${randomName()}/`);
+                await this._downloadBulk(links, folder, `${randomName()}`);
             else
                 await this._downloadBulk(links, folder);
             // if(links.length > 1)
@@ -3925,8 +3925,9 @@ class RedditDownloader extends BaseRedditClass {
             await wait(50);
             _IsOnUserPage = window.location.href.includes('reddit.com/user/' + username);
 
-            if (!_IsOnUserPage) {
-                isAdded = false;
+            if (true) {
+                if(!_IsOnUserPage)
+                    isAdded = false;
                 if (window.RedditDownloader != undefined) await window.RedditDownloader.addPostDownloadButton().catch(() => {});
             }
             if (!isAdded && _IsOnUserPage) {
@@ -4001,7 +4002,7 @@ class OldRedditDownloader extends BaseRedditClass {
 
                 const downloadButtonLi = document.createElement('li');
                 downloadButtonLi.classList.add('download-button');
-                
+
                 const downloadButtonA = document.createElement('a');
                 downloadButtonA.innerHTML = 'Download';
                 downloadButtonA.setAttribute('Reddit_Downloader', 'download');
@@ -4022,7 +4023,7 @@ class OldRedditDownloader extends BaseRedditClass {
                 downloadButtonLi.appendChild(downloadButtonA);
                 buttons.appendChild(downloadButtonLi);
 
-                
+
             }
 
             res();
